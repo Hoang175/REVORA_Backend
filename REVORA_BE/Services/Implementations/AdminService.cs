@@ -320,7 +320,7 @@ namespace REVORA_BE.Services.Implementations
             };
         }
 
-        public async Task<AdminDashboardResponseDto> GetDashboardStatsAsync()
+        public async Task<AdminDashboardResponseDto> GetDashboardStatsAsync(string timeRange = "week")
         {
             var now = DateTime.UtcNow;
             var thisMonthStart = new DateTime(now.Year, now.Month, 1);
@@ -359,43 +359,91 @@ namespace REVORA_BE.Services.Implementations
 
             // Số Sản Phẩm Đang Bán
             int activeProducts = await _context.Products.CountAsync(p => p.ProductStatus == "Public");
-            // Assuming no historical status tracking, we'll just return 0% growth or mock it based on created time
             int newProductsThisMonth = await _context.Products.CountAsync(p => p.ProductCreateAt >= thisMonthStart && p.ProductCreateAt < nextMonthStart);
             int newProductsLastMonth = await _context.Products.CountAsync(p => p.ProductCreateAt >= lastMonthStart && p.ProductCreateAt < thisMonthStart);
             decimal productsGrowth = newProductsLastMonth > 0
                 ? ((decimal)(newProductsThisMonth - newProductsLastMonth) / newProductsLastMonth) * 100
                 : (newProductsThisMonth > 0 ? 100 : 0);
 
-            // Biểu Đồ 7 Ngày Qua
-            var sevenDaysAgo = now.Date.AddDays(-6);
-            var last7DaysOrders = await _context.Orders
-                .Include(o => o.PaidCreditPackage)
-                .ThenInclude(p => p.CreditType)
-                .Where(o => o.PaymentStatus == PaymentStatus.Successful && o.PaidAt >= sevenDaysAgo)
-                .ToListAsync();
-
-            var revenueChart = new List<AdminRevenueChartItemDto>();
-            for (int i = 0; i < 7; i++)
+            // Lấy danh sách giao dịch thành công theo khoảng thời gian được chọn
+            DateTime filterStartDate;
+            if (timeRange?.ToLower() == "month")
             {
-                var dayStart = sevenDaysAgo.AddDays(i);
-                var dayEnd = dayStart.AddDays(1);
-                var dayOrders = last7DaysOrders.Where(o => o.PaidAt >= dayStart && o.PaidAt < dayEnd).ToList();
-                revenueChart.Add(new AdminRevenueChartItemDto
-                {
-                    Label = dayStart.ToString("dd/MM"),
-                    Posting = dayOrders.Where(o => o.PaidCreditPackage?.CreditType?.Name == "Posting").Sum(o => o.AmountPaid),
-                    Featured = dayOrders.Where(o => o.PaidCreditPackage?.CreditType?.Name == "Featured").Sum(o => o.AmountPaid)
-                });
+                filterStartDate = now.Date.AddDays(-29);
+            }
+            else if (timeRange?.ToLower() == "year")
+            {
+                filterStartDate = new DateTime(now.Year, now.Month, 1).AddMonths(-11);
+            }
+            else
+            {
+                filterStartDate = now.Date.AddDays(-6);
             }
 
-            // Phân Bổ Gói Đã Bán Tháng Này
-            var monthOrdersWithPackages = await _context.Orders
+            var timeRangeOrders = await _context.Orders
                 .Include(o => o.PaidCreditPackage)
-                .Where(o => o.PaymentStatus == PaymentStatus.Successful && o.PaidAt >= thisMonthStart && o.PaidAt < nextMonthStart)
+                .ThenInclude(p => p.CreditType)
+                .Where(o => o.PaymentStatus == PaymentStatus.Successful && (o.PaidAt >= filterStartDate || (o.PaidAt == null && o.CreatedAt >= filterStartDate)))
                 .ToListAsync();
 
-            var packageColors = new Dictionary<string, string>
+            // Biểu Đồ Doanh Thu Theo Thời Gian
+            var revenueChart = new List<AdminRevenueChartItemDto>();
+            if (timeRange?.ToLower() == "month")
             {
+                for (int i = 0; i < 30; i++)
+                {
+                    var dayStart = filterStartDate.AddDays(i);
+                    var dayEnd = dayStart.AddDays(1);
+                    var dayOrders = timeRangeOrders.Where(o => (o.PaidAt ?? o.CreatedAt) >= dayStart && (o.PaidAt ?? o.CreatedAt) < dayEnd).ToList();
+                    revenueChart.Add(new AdminRevenueChartItemDto
+                    {
+                        Label = dayStart.ToString("dd/MM"),
+                        Posting = dayOrders.Where(o => o.PaidCreditPackage?.CreditType?.Name == "Posting").Sum(o => o.AmountPaid),
+                        Featured = dayOrders.Where(o => o.PaidCreditPackage?.CreditType?.Name == "Featured").Sum(o => o.AmountPaid)
+                    });
+                }
+            }
+            else if (timeRange?.ToLower() == "year")
+            {
+                for (int i = 0; i < 12; i++)
+                {
+                    var monthStart = filterStartDate.AddMonths(i);
+                    var monthEnd = monthStart.AddMonths(1);
+                    var monthOrders = timeRangeOrders.Where(o => (o.PaidAt ?? o.CreatedAt) >= monthStart && (o.PaidAt ?? o.CreatedAt) < monthEnd).ToList();
+                    revenueChart.Add(new AdminRevenueChartItemDto
+                    {
+                        Label = $"T{monthStart.Month}/{monthStart.Year}",
+                        Posting = monthOrders.Where(o => o.PaidCreditPackage?.CreditType?.Name == "Posting").Sum(o => o.AmountPaid),
+                        Featured = monthOrders.Where(o => o.PaidCreditPackage?.CreditType?.Name == "Featured").Sum(o => o.AmountPaid)
+                    });
+                }
+            }
+            else
+            {
+                // default "week" (7 days)
+                for (int i = 0; i < 7; i++)
+                {
+                    var dayStart = filterStartDate.AddDays(i);
+                    var dayEnd = dayStart.AddDays(1);
+                    var dayOrders = timeRangeOrders.Where(o => (o.PaidAt ?? o.CreatedAt) >= dayStart && (o.PaidAt ?? o.CreatedAt) < dayEnd).ToList();
+                    revenueChart.Add(new AdminRevenueChartItemDto
+                    {
+                        Label = dayStart.ToString("dd/MM"),
+                        Posting = dayOrders.Where(o => o.PaidCreditPackage?.CreditType?.Name == "Posting").Sum(o => o.AmountPaid),
+                        Featured = dayOrders.Where(o => o.PaidCreditPackage?.CreditType?.Name == "Featured").Sum(o => o.AmountPaid)
+                    });
+                }
+            }
+
+            // Phân Bổ Gói Đã Bán (Ăn theo bộ lọc tuần, tháng, năm)
+            var packageColors = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "Trending", "#10B981" },       // Emerald Green
+                { "Tăng Tốc", "#3B82F6" },       // Blue
+                { "Bứt Phá", "#8B5CF6" },        // Purple / Violet
+                { "Spotlight", "#F59E0B" },      // Gold / Amber
+                { "Premium", "#EF4444" },        // Red / Rose
+                { "Khởi Động", "#06B6D4" },      // Cyan
                 { "Posting Day", "#3B82F6" },
                 { "Posting Week", "#8B5CF6" },
                 { "Posting Month", "#10B981" },
@@ -404,30 +452,46 @@ namespace REVORA_BE.Services.Implementations
                 { "Featured Month", "#2D5A3D" }
             };
 
-            var packageDistribution = monthOrdersWithPackages
+            var vibrantPalette = new[] { "#10B981", "#3B82F6", "#8B5CF6", "#F59E0B", "#EF4444", "#06B6D4", "#EC4899", "#14B8A6", "#F97316", "#84CC16" };
+
+            var groupedPackages = timeRangeOrders
                 .Where(o => o.PaidCreditPackage != null)
                 .GroupBy(o => o.PaidCreditPackage!.Name)
-                .Select(g => new AdminPackageDistributionDto
-                {
-                    Name = g.Key,
-                    Value = g.Count(),
-                    Color = packageColors.ContainsKey(g.Key) ? packageColors[g.Key] : "#9CA3AF"
-                })
                 .ToList();
 
-            // Hoạt Động Gần Đây (Top 5)
+            var packageDistribution = new List<AdminPackageDistributionDto>();
+            int colorIdx = 0;
+            foreach (var g in groupedPackages)
+            {
+                string pkgName = g.Key;
+                string color = packageColors.ContainsKey(pkgName) ? packageColors[pkgName] : vibrantPalette[colorIdx % vibrantPalette.Length];
+                packageDistribution.Add(new AdminPackageDistributionDto
+                {
+                    Name = pkgName,
+                    Value = g.Count(),
+                    Color = color
+                });
+                colorIdx++;
+            }
+
+            // Hoạt Động Gần Đây
             var recentActivities = await _context.Orders
                 .Include(o => o.User)
                 .Include(o => o.PaidCreditPackage)
                 .Where(o => o.PaymentStatus == PaymentStatus.Successful)
                 .OrderByDescending(o => o.PaidAt)
-                .Take(5)
+                .Take(8)
                 .Select(o => new AdminRecentActivityDto
                 {
+                    Id = o.OrderCode,
                     User = o.User != null ? o.User.Username : "Unknown",
+                    FullName = o.User != null ? o.User.FullName : null,
+                    AvatarUrl = o.User != null ? o.User.AvatarUrl : null,
+                    Package = o.PaidCreditPackage != null ? o.PaidCreditPackage.Name : "Gói Tín Dụng",
                     Action = o.PaidCreditPackage != null ? $"mua gói {o.PaidCreditPackage.Name}" : "mua gói",
                     Amount = o.AmountPaid,
-                    Time = o.PaidAt != null ? o.PaidAt.Value.ToString("dd/MM/yyyy HH:mm") : ""
+                    Time = ((o.PaidAt ?? o.CreatedAt).AddHours(7)).ToString("dd/MM/yyyy HH:mm"),
+                    Status = "Thành công"
                 })
                 .ToListAsync();
 
@@ -441,6 +505,7 @@ namespace REVORA_BE.Services.Implementations
                 TotalUsersGrowth = Math.Round(usersGrowth, 1),
                 ActiveProducts = activeProducts,
                 ActiveProductsGrowth = Math.Round(productsGrowth, 1),
+                RevenueChart = revenueChart,
                 RevenueChart7Days = revenueChart,
                 PackageDistribution = packageDistribution,
                 RecentActivities = recentActivities

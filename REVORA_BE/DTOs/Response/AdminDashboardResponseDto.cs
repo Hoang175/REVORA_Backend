@@ -16,6 +16,7 @@ namespace REVORA_BE.DTOs.Response
         public int ActiveProducts { get; set; }
         public decimal ActiveProductsGrowth { get; set; }
 
+        public List<AdminRevenueChartItemDto> RevenueChart { get; set; } = new List<AdminRevenueChartItemDto>();
         public List<AdminRevenueChartItemDto> RevenueChart7Days { get; set; } = new List<AdminRevenueChartItemDto>();
         public List<AdminPackageDistributionDto> PackageDistribution { get; set; } = new List<AdminPackageDistributionDto>();
         public List<AdminRecentActivityDto> RecentActivities { get; set; } = new List<AdminRecentActivityDto>();
@@ -30,9 +31,14 @@ namespace REVORA_BE.DTOs.Response
 
     public class AdminRecentActivityDto
     {
+        public string? Id { get; set; }
         public string User { get; set; } = null!;
+        public string? FullName { get; set; }
+        public string? AvatarUrl { get; set; }
+        public string? Package { get; set; }
         public string Action { get; set; } = null!;
         public decimal Amount { get; set; }
         public string Time { get; set; } = null!;
+        public string? Status { get; set; }
     }
 }

@@ -47,9 +47,9 @@ namespace REVORA_BE.Controllers
         }
 
         [HttpGet("Dashboard")]
-        public async Task<IActionResult> GetDashboardStats()
+        public async Task<IActionResult> GetDashboardStats([FromQuery] string timeRange = "week")
         {
-            var stats = await _adminService.GetDashboardStatsAsync();
+            var stats = await _adminService.GetDashboardStatsAsync(timeRange);
             return Ok(new { success = true, data = stats });
         }
 
