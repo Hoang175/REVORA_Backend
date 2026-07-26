@@ -652,6 +652,11 @@ namespace REVORA_BE.Services.Implementations
                 usersQuery = usersQuery.Where(u => u.RoleId == query.RoleId.Value);
             }
 
+            if (!string.IsNullOrWhiteSpace(query.RoleName))
+            {
+                usersQuery = usersQuery.Where(u => u.Role != null && u.Role.RoleName.ToLower() == query.RoleName.ToLower());
+            }
+
             if (query.IsActive.HasValue)
             {
                 usersQuery = usersQuery.Where(u => u.IsActive == query.IsActive.Value);
@@ -660,8 +665,20 @@ namespace REVORA_BE.Services.Implementations
             var totalRecords = await usersQuery.CountAsync();
             var totalPages = (int)Math.Ceiling(totalRecords / (double)query.PageSize);
 
+            if (query.SortBy?.ToLower() == "oldest")
+            {
+                usersQuery = usersQuery.OrderBy(u => u.CreatedAt);
+            }
+            else if (query.SortBy?.ToLower() == "transactions")
+            {
+                usersQuery = usersQuery.OrderByDescending(u => _context.Orders.Count(o => o.UserId == u.UserId));
+            }
+            else
+            {
+                usersQuery = usersQuery.OrderByDescending(u => u.CreatedAt);
+            }
+
             var items = await usersQuery
-                .OrderByDescending(u => u.CreatedAt)
                 .Skip((query.Page - 1) * query.PageSize)
                 .Take(query.PageSize)
                 .Select(u => new AdminUserResponseDto
@@ -688,6 +705,27 @@ namespace REVORA_BE.Services.Implementations
             };
         }
 
+        public async Task<AdminUsersSummaryDto> GetUsersSummaryAsync()
+        {
+            var now = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time"));
+            var thisMonthStart = new DateTime(now.Year, now.Month, 1);
+
+            var totalUsers = await _context.Users.CountAsync();
+            var activeUsers = await _context.Users.CountAsync(u => u.IsActive);
+            var suspendedUsers = await _context.Users.CountAsync(u => !u.IsActive);
+            var adminUsers = await _context.Users.Include(u => u.Role).CountAsync(u => u.Role != null && u.Role.RoleName == "Admin");
+            var newUsersThisMonth = await _context.Users.CountAsync(u => u.CreatedAt >= thisMonthStart);
+
+            return new AdminUsersSummaryDto
+            {
+                TotalUsers = totalUsers,
+                ActiveUsers = activeUsers,
+                SuspendedUsers = suspendedUsers,
+                AdminUsers = adminUsers,
+                NewUsersThisMonth = newUsersThisMonth
+            };
+        }
+
         public async Task<bool> ToggleUserStatusAsync(long userId, ToggleUserStatusDto request, long currentAdminId)
         {
             if (userId == currentAdminId)
@@ -695,10 +733,15 @@ namespace REVORA_BE.Services.Implementations
                 throw new ValidationException("Bạn không thể tự khóa tài khoản của chính mình.");
             }
 
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
+            var user = await _context.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.UserId == userId);
             if (user == null)
             {
                 throw new NotFoundException("Người dùng không tồn tại.");
+            }
+
+            if (user.Role != null && user.Role.RoleName == "Admin")
+            {
+                throw new ValidationException("Bạn không thể khóa hoặc mở khóa người có cùng vai trò.");
             }
 
             if (user.IsActive == request.IsActive)

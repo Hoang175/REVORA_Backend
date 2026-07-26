@@ -74,6 +74,13 @@ namespace REVORA_BE.Controllers
             return Ok(new { success = true, data = result });
         }
 
+        [HttpGet("Users/summary")]
+        public async Task<IActionResult> GetUsersSummary()
+        {
+            var result = await _adminService.GetUsersSummaryAsync();
+            return Ok(new { success = true, data = result });
+        }
+
         [HttpPatch("Users/{id}/status")]
         public async Task<IActionResult> ToggleUserStatus(long id, [FromBody] REVORA_BE.DTOs.ToggleUserStatusDto request)
         {

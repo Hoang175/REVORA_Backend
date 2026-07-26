@@ -15,6 +15,7 @@ namespace REVORA_BE.Services.Interfaces
         Task<int> SendNotificationsAsync(AdminSendNotificationRequestDto request);
         Task<List<UserSearchDto>> SearchUsersAsync(string query);
         Task<PagedResult<AdminUserResponseDto>> GetUsersAsync(AdminUserQueryDto query);
+        Task<AdminUsersSummaryDto> GetUsersSummaryAsync();
         Task<bool> ToggleUserStatusAsync(long userId, ToggleUserStatusDto request, long currentAdminId);
         Task<PagedResult<TransactionResponseDto>> GetUserTransactionsAsync(long userId, int page, int pageSize);
         Task<AdminUserOverviewDto> GetUserOverviewAsync(long userId);
