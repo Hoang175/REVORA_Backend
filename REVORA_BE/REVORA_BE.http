@@ -1,0 +1,6 @@
+@REVORA_BE_HostAddress = http://localhost:5207
+
+GET {{REVORA_BE_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
