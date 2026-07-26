@@ -8,7 +8,9 @@ namespace REVORA_BE.DTOs
         public int PageSize { get; set; } = 10;
         public string? Search { get; set; }
         public int? RoleId { get; set; }
+        public string? RoleName { get; set; }
         public bool? IsActive { get; set; }
+        public string? SortBy { get; set; }
     }
 
     public class AdminUserResponseDto
@@ -50,5 +52,14 @@ namespace REVORA_BE.DTOs
         public int ProductsPosted { get; set; }
         public int TotalTransactions { get; set; }
         public List<TransactionResponseDto> RecentTransactions { get; set; } = new List<TransactionResponseDto>();
+    }
+
+    public class AdminUsersSummaryDto
+    {
+        public int TotalUsers { get; set; }
+        public int ActiveUsers { get; set; }
+        public int SuspendedUsers { get; set; }
+        public int AdminUsers { get; set; }
+        public int NewUsersThisMonth { get; set; }
     }
 }
