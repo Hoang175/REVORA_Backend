@@ -424,6 +424,13 @@ namespace REVORA_BE.Services
                         internalMessage: $"Google login failed: Account {user.Email} is disabled",
                         code: "UserInactive");
                 }
+
+                if (!string.IsNullOrEmpty(payload.Picture) && user.AvatarUrl != payload.Picture)
+                {
+                    user.AvatarUrl = payload.Picture;
+                    _context.Users.Update(user);
+                    await _context.SaveChangesAsync(cancellationToken);
+                }
             }
 
             var permissions = user!.Role?.RolePermissions?
